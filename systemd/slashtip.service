@@ -1,0 +1,20 @@
+[Unit]
+Description=slashtip — Lightning tip jar / POS (phoenixd + WhisPlay HAT)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=slashbin
+WorkingDirectory=/home/slashbin/slashtip
+EnvironmentFile=-/home/slashbin/.phoenix-pos/.env
+ExecStart=/usr/bin/node /home/slashbin/slashtip/dist/index.js
+Restart=on-failure
+RestartSec=3
+# pigpio + spi-device need GPIO + SPI access
+SupplementaryGroups=gpio spi audio
+# 512 MB Pi Zero 2W headroom
+MemoryMax=380M
+
+[Install]
+WantedBy=multi-user.target

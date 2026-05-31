@@ -9,6 +9,9 @@ dist/
 # os
 .DS_Store
 
+# claude code local state
+.claude/
+
 # python leftovers
 .venv/
 __pycache__/
