@@ -65,12 +65,104 @@ GPIO is driven through `@iiot2k/gpiox` (libgpiod v2). We deliberately avoid
 
 ## Setup
 
-### 1. Configure `phoenixd`
+### 1. Run `phoenixd`
 
-You need a `phoenixd` instance reachable from the Pi over HTTP, with
-`http-password-limited-access` set in `phoenix.conf`. The Pi only ever needs the
-limited-access password — it creates invoices and reads payment events but
-cannot pay anyone.
+[`phoenixd`](https://github.com/ACINQ/phoenixd) is ACINQ's self-custodial
+Lightning node daemon — same protocol stack as the Phoenix mobile wallet, but
+headless. It sets up channels with ACINQ automatically on first inbound payment
+and pays a fixed fee for the service, so you do **not** need to manage your own
+peers, watchtowers, or on-chain wallet.
+
+The Pi never runs `phoenixd` itself — Pi Zero 2W has 512 MB RAM and `phoenixd`
+needs a JRE. Run it on a small VPS or any always-on box that the Pi can reach.
+
+#### Install
+
+Download the latest binaries from
+[github.com/ACINQ/phoenixd/releases](https://github.com/ACINQ/phoenixd/releases)
+and unpack to `~/phoenix`:
+
+```bash
+# on the phoenixd host (x86_64 Linux example)
+mkdir -p ~/phoenix && cd ~/phoenix
+curl -sSL https://github.com/ACINQ/phoenixd/releases/download/v0.6.0/phoenixd-0.6.0-linux-x64.zip -o phoenixd.zip
+unzip phoenixd.zip && mv phoenixd-*/{phoenixd,phoenix-cli} . && chmod +x phoenixd phoenix-cli
+sudo apt-get install -y openjdk-21-jre-headless
+```
+
+#### First run + seed
+
+```bash
+./phoenixd
+# On first launch it prints a seed phrase and the http-password values.
+# WRITE THE SEED DOWN OFFLINE. It controls all funds. Then Ctrl+C and edit
+# ~/.phoenix/phoenix.conf to set http-bind-ip if needed (defaults to 127.0.0.1).
+```
+
+Your `~/.phoenix/phoenix.conf` should end up something like:
+
+```
+http-bind-ip=0.0.0.0
+http-bind-port=9740
+http-password=<long random for full access — keep secret on the server only>
+http-password-limited-access=<long random for the Pi — read-only & invoice creation>
+```
+
+The Pi uses **only** `http-password-limited-access`. Limited-access endpoints
+(`/createinvoice`, `/payments/...`, `/getinfo`, `/websocket` for incoming
+payments) let it accept payments but not spend funds.
+
+#### systemd unit for `phoenixd`
+
+```ini
+# /etc/systemd/system/phoenixd.service
+[Unit]
+Description=phoenixd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=phoenix
+WorkingDirectory=/home/phoenix
+ExecStart=/home/phoenix/phoenix/phoenixd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable --now phoenixd
+journalctl -fu phoenixd
+```
+
+#### Expose it to the Pi
+
+The Pi needs TCP access to port `9740` on the `phoenixd` host. Pick one:
+
+- **Same LAN** — point the Pi at the LAN IP (`http://192.168.1.x:9740`). Simplest.
+- **Public host, port-forward** — open `9740/tcp` on your VPS firewall, point Pi
+  at `http://your-host:9740`. The bearer password is the only secret in flight;
+  put it behind HTTPS if the Pi is anywhere other than a trusted LAN.
+- **Public host, behind nginx/caddy with TLS** — terminate TLS at 443, proxy to
+  `127.0.0.1:9740`. Point Pi at `https://your-host`. WebSockets just work
+  through both nginx and caddy with the standard `Upgrade`/`Connection` headers.
+
+#### Verify reachability
+
+```bash
+curl -u ":<http-password-limited-access>" http://your-phoenixd-host:9740/getinfo
+# → JSON with nodeId, channels, chain
+```
+
+#### Fund the channel
+
+`phoenixd` opens a channel automatically when someone first pays you. The first
+incoming payment is partially consumed by the channel-open fee (ACINQ's
+service). Send yourself ~10 000 sat from any LN wallet to seed it. From then on
+every payment is instant and routed through that single channel.
 
 ### 2. Provision the Pi
 
