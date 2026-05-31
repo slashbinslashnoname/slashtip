@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# secrets
+.env
+.env.local
+
+# os
+.DS_Store
+
+# python leftovers
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/

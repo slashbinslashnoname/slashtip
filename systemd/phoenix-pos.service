@@ -1,0 +1,18 @@
+[Unit]
+Description=Phoenix Lightning POS (WhisPlay HAT)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=slashbin
+WorkingDirectory=/home/slashbin/phoenix-pos
+EnvironmentFile=/home/slashbin/.phoenix-pos/.env
+ExecStart=/usr/bin/node /home/slashbin/phoenix-pos/dist/index.js
+Restart=on-failure
+RestartSec=3
+# pigpio + spi-device need GPIO + SPI access
+SupplementaryGroups=gpio spi audio
+
+[Install]
+WantedBy=multi-user.target
